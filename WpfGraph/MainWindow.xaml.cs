@@ -28,12 +28,15 @@ namespace WpfGraph
         public MainWindow()
         {
             InitializeComponent();
+            //Width = 1400;
+            //Height = 1300;
+            WindowState = WindowState.Maximized;
             this.Loaded += MainWindow_Loaded;
         }
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            if (false)
+            if (true)
             {
                 var tbItem = new TabItem()
                 {
@@ -95,6 +98,7 @@ namespace WpfGraph
             {
                 var tbItem = new TabItem() { Header = "TabTwo" };
                 tbCtrl.Items.Add(tbItem);
+                tbCtrl.SelectedIndex = 0;
                 var grid = new System.Windows.Controls.Grid();
                 tbItem.Content = grid;
                 grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(20) });
@@ -125,38 +129,18 @@ namespace WpfGraph
                 grid.Children.Add(dp);
 
                 var lstGraphs = new ObservableCollection<FrameworkElement>();
-                var lb = new ListBox
-                {
-                    ItemsSource = lstGraphs,
-                    ItemsPanel = (ItemsPanelTemplate)XamlReader.Parse($@"
-<ItemsPanelTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation"">
-    <WrapPanel Orientation=""Horizontal"" HorizontalAlignment=""Stretch""/>
-</ItemsPanelTemplate>")
-                };
-                for (int i = 0; i < 20; i++)
-                {
-                    await Task.Delay(100);
-                    if (i % 4 == 0)
-                    {
-                        lstGraphs.Add(new TextBlock() { Text = $"adsf {i}" });
-                    }
-                    else
-                    {
-                        lstGraphs.Add(MakeGraph(i));
-                    }
-                }
-                tbCtrl.SelectionChanged += async (o, e) =>
-                 {
-                     if (tbCtrl.Items[tbCtrl.SelectedIndex] == tbItem)
-                     {
-                         await Task.Delay(100); //til ScrollViewer ready
-                         var sviewer = lb.GetChild<ScrollViewer>(); //sviewer is not available til loaded
-                         if (sviewer != null)
-                         {
-                             sviewer.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-                         }
-                     }
-                 };
+
+                var lb = (ListBox)XamlReader.Parse($@"
+<ListBox xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation"" xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
+    ScrollViewer.HorizontalScrollBarVisibility = ""Disabled"">
+    <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+            <WrapPanel Orientation=""Horizontal"" HorizontalAlignment=""Stretch""/>
+        </ItemsPanelTemplate>
+    </ListBox.ItemsPanel>
+</ListBox>");
+                dp.Children.Add(lb);
+                lb.ItemsSource = lstGraphs;
                 lstGraphs.CollectionChanged += async (o, e) =>
                 {
                     if (e.NewItems != null && e.NewItems.Count > 0)
@@ -167,14 +151,23 @@ namespace WpfGraph
                             {
                                 await Task.Delay(10); //delay til new items processed by scrollviewer, then force a poschanged
                                 wex.RedoPosChanged();
-                                break; // only need this once if any found
                             }
                         }
                     }
                 };
-                dp.Children.Add(lb);
+                for (int i = 0; i < 20; i++)
+                {
+                    await Task.Delay(500);
+                    if (i % 4 == 0)
+                    {
+                        lstGraphs.Add(new TextBlock() { Text = $"adsf {i}" });
+                    }
+                    else
+                    {
+                        lstGraphs.Add(MakeGraph(i));
+                    }
+                }
             }
-            tbCtrl.SelectedIndex = 0;
         }
 
         static FrameworkElement MakeGraph(int num)
@@ -230,6 +223,9 @@ namespace WpfGraph
         }
     }
     /// <summary>
+    /// Sometimes it's nice to have a WrapPanel inside a ListBox to get multiple graphs showing.
+    /// A WindowsFormHost inside a ScrollViewer doesn't behave: as new items are addedd, they leak outside the scrollviewer region
+    /// 
     /// Works without ScrollViewer too
     ///https://stackoverflow.com/questions/14080580/scrollviewer-is-not-working-in-wpf-windowsformhost/46858873#46858873
     /// </summary>
@@ -245,6 +241,7 @@ namespace WpfGraph
         public ScrollViewer? ParentScrollViewer { get; set; }
         private bool Scrolling;
         public bool Resizing;
+        private bool Refreshing;
         private Rect lastBoundingBox;
         public WindowsFormsHostForScrollViewer()
         {
@@ -252,6 +249,7 @@ namespace WpfGraph
         }
         public void RedoPosChanged()
         {
+            Refreshing = true;
             OnWindowPositionChanged(lastBoundingBox);
         }
 
@@ -268,7 +266,7 @@ namespace WpfGraph
                 ParentScrollViewer.SizeChanged += ParentScrollViewer_SizeChanged;
                 ParentScrollViewer.Loaded += ParentScrollViewer_Loaded;
 
-                if (Scrolling || Resizing)
+                if (Scrolling || Resizing || Refreshing)
                 {
                     if (PresentationSource.FromVisual(this)?.RootVisual?.TransformToDescendant(ParentScrollViewer) is MatrixTransform tr)
                     {
@@ -296,6 +294,7 @@ namespace WpfGraph
                         SetRegion(x1, y1, x2, y2);
                         this.Scrolling = false;
                         this.Resizing = false;
+                        this.Refreshing = false;
                     }
                 }
             }
